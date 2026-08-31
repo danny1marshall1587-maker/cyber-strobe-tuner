@@ -209,7 +209,9 @@ def main():
     param_set_tuner = """
             if (instance == "/pedalboard" && symbol == ":tuner") {
                 var tuner = window.CyberTunerInstance || (desktop && desktop.cyberTuner);
-                if (tuner) {
+                if (tuner && typeof tuner.handleNativeParamSet === 'function') {
+                    tuner.handleNativeParamSet(value);
+                } else if (tuner) {
                     if (value > 0.5) {
                         if (!tuner.isOpen) tuner.open();
                     } else {

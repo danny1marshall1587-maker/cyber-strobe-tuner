@@ -289,11 +289,55 @@
 
     CyberTuner.prototype.initMidi = function () {
         window.CyberTunerInstance = this;
+        var self = this;
+        if (navigator.requestMIDIAccess) {
+            navigator.requestMIDIAccess().then(function (midiAccess) {
+                self.midiAccess = midiAccess;
+                var inputs = midiAccess.inputs.values();
+                for (var input = inputs.next(); input && !input.done; input = inputs.next()) {
+                    input.value.onmidimessage = function (msg) {
+                        self.handleMidiMessage(msg);
+                    };
+                }
+                midiAccess.onstatechange = function (e) {
+                    if (e.port.type === 'input' && e.port.state === 'connected') {
+                        e.port.onmidimessage = function (msg) {
+                            self.handleMidiMessage(msg);
+                        };
+                    }
+                };
+            }).catch(function () {});
+        }
     };
 
     // Called by host.js when midi_map arrives for /pedalboard :tuner
     CyberTuner.prototype.handleNativeMidi = function (channel, control, value) {
         this.updateMidiMappingLabel(channel - 1, control);
+    };
+
+    // Called by host.js when param_set arrives for /pedalboard :tuner
+    CyberTuner.prototype.handleNativeParamSet = function (val) {
+        var isDown = (parseFloat(val) > 0.5);
+        if (this.midiMode === 'momentary') {
+            // Momentary Footswitch: Toggle on press (down), ignore release (up)
+            if (isDown) {
+                this.toggle();
+            }
+        } else if (this.midiMode === 'hold') {
+            // Hold Mode: Open on press, close on release
+            if (isDown) {
+                if (!this.isOpen) this.open();
+            } else {
+                if (this.isOpen) this.close();
+            }
+        } else if (this.midiMode === 'latching') {
+            // Latching Mode: Open when 1, Close when 0
+            if (isDown) {
+                if (!this.isOpen) this.open();
+            } else {
+                if (this.isOpen) this.close();
+            }
+        }
     };
 
     CyberTuner.prototype.updateMidiMappingLabel = function (channel, control) {
@@ -313,7 +357,7 @@
     // Opens the standard MOD Desktop hardware addressing dialog for the tuner toggle
     // Identical to assigning any other pedalboard or plugin control
     CyberTuner.prototype.openMidiAssignDialog = function () {
-        .mod-pedal-settings-address.remove();
+        $('.mod-pedal-settings-address').remove();
         if (!window.desktop || !window.desktop.hardwareManager) {
             alert('MOD Desktop hardware manager not available.\nMake sure a pedalboard is loaded.');
             return;
