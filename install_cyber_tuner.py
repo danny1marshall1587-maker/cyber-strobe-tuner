@@ -663,8 +663,17 @@ def main():
         
         ws_patch = '''        elif cmd == "tuner_midi_map":\n            ch, cc = data[1].split(" ")\n            def map_tuner_now(_):\n                SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))\n            SESSION.host.send_notmodified("add http://moddevices.com/plugins/mod-devel/tuna 9994", map_tuner_now)\n            return\n\n'''
         
+
+        # REPAIR: If previous installer broke indentation, fix it
+        broken_code = 'elif cmd == "tuner_midi_map":'
+        if broken_code in ws_content and '        elif cmd == "tuner_midi_map":' not in ws_content:
+            ws_content = ws_content.replace('elif cmd == "tuner_midi_map":', '        elif cmd == "tuner_midi_map":')
+            with open(webserver_py_path, 'w', encoding='utf-8') as f:
+                f.write(ws_content)
+            print("  Repaired broken indentation in mod/webserver.py")
+
         if old_ws_code in ws_content:
-            ws_content = ws_content.replace(old_ws_code, ws_patch.strip())
+            ws_content = ws_content.replace(old_ws_code, ws_patch)
             with open(webserver_py_path, 'w', encoding='utf-8') as f:
                 f.write(ws_content)
             print("  Upgraded mod/webserver.py patch successfully")
