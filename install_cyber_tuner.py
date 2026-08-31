@@ -82,7 +82,6 @@ def main():
     shutil.copy2(os.path.join(src_root, 'html', 'css', 'tuner.css'), os.path.join(target_dir, 'html', 'css', 'tuner.css'))
     shutil.copy2(os.path.join(src_root, 'html', 'js', 'tuner.js'), os.path.join(target_dir, 'html', 'js', 'tuner.js'))
 
-    # Tuning fork icon
     icon_src = os.path.join(src_root, 'html', 'img', 'icons', '25', 'tuner.png')
     icon_dst = os.path.join(target_dir, 'html', 'img', 'icons', '25', 'tuner.png')
     if os.path.exists(icon_src):
@@ -98,7 +97,7 @@ def main():
     with open(index_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
 
-    # Clean out any old bottom tuner button
+    # Clean out old bottom tuner button if present
     if '<div id="mod-tuner-icon"' in html_content:
         html_content = html_content.replace(
             '<div id="mod-tuner-icon" class="icon" data-message="Open Cyber Strobe Tuner">TUNER</div>\n        ',
@@ -118,117 +117,96 @@ def main():
         else:
             html_content = html_content.replace(
                 '<link rel="stylesheet" href="css/main.css">',
-                '<link rel="stylesheet" href="css/main.css">\n    <link rel="stylesheet" href="css/tuner.css">'
+                '<link rel="stylesheet" href="css/main.css">\n<link rel="stylesheet" href="css/tuner.css">'
             )
 
-    # Add JS script tag right after window.js (BEFORE desktop.js!)
+    # Add JS script
     if 'tuner.js' not in html_content:
-        if 'js/window.js?v={{version}}' in html_content:
+        if '<script type="text/javascript" src="js/desktop.js?v={{version}}"></script>' in html_content:
             html_content = html_content.replace(
-                '<script type="text/javascript" src="js/window.js?v={{version}}"></script>',
-                '<script type="text/javascript" src="js/window.js?v={{version}}"></script>\n<script type="text/javascript" src="js/tuner.js?v={{version}}"></script>'
+                '<script type="text/javascript" src="js/desktop.js?v={{version}}"></script>',
+                '<script type="text/javascript" src="js/tuner.js?v={{version}}"></script>\n<script type="text/javascript" src="js/desktop.js?v={{version}}"></script>'
             )
         else:
             html_content = html_content.replace(
-                '<script src="js/window.js"></script>',
-                '<script src="js/window.js"></script>\n<script src="js/tuner.js"></script>'
+                '<script src="js/desktop.js"></script>',
+                '<script src="js/tuner.js"></script>\n<script src="js/desktop.js"></script>'
             )
 
-    # Top Bar Tuner Button in #pedalboard-info .actions
-    tuner_top_btn = '<button class="js-tuner" id="mod-tuner-top-btn" title="Cyber Strobe Tuner (Click or assign MIDI)">Tuner</button>'
+    # Add Top Header Tuner button
+    top_btn_html = '<a id="mod-tuner-top-btn" class="mod-tuner-top-btn" title="Open Cyber Strobe & Peak Tuner (Right-click to assign MIDI)" href="javascript:void(0);">TUNER</a>'
+    if 'id="mod-tuner-top-btn"' not in html_content:
+        if '<a id="mod-transport-icon"' in html_content:
+            html_content = html_content.replace(
+                '<a id="mod-transport-icon"',
+                top_btn_html + '\n            <a id="mod-transport-icon"'
+            )
+        elif '<div id="mod-transport-window"' in html_content:
+            html_content = html_content.replace(
+                '<div id="mod-transport-window"',
+                top_btn_html + '\n    <div id="mod-transport-window"'
+            )
 
-    if 'id="mod-tuner-top-btn"' in html_content:
-        import re
-        html_content = re.sub(r'<button class="js-tuner" id="mod-tuner-top-btn"[^>]*>.*?</button>', tuner_top_btn, html_content, flags=re.DOTALL)
-    else:
-        html_content = html_content.replace(
-            '<button class="js-cv-addressing"',
-            tuner_top_btn + '\n                    <button class="js-cv-addressing"'
-        )
-
-    # Add Modal Window container (hidden by default)
+    # Add Tuner Window Modal container
+    modal_html = """
+    <!-- CYBER STROBE TUNER MODAL WINDOW -->
+    <div id="cyber-tuner-backdrop" class="cyber-tuner-backdrop" style="display:none;"></div>
+    <div id="mod-tuner-window" class="cyber-tuner-window" style="display:none;"></div>
+"""
     if 'id="mod-tuner-window"' not in html_content:
-        html_content = html_content.replace(
-            '<div id="mod-transport-window"',
-            '<div id="mod-tuner-window" style="display:none;"></div>\n    <div id="mod-transport-window"'
-        )
+        html_content = html_content.replace('</body>', modal_html + '\n</body>')
 
     with open(index_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     print("  Patched html/index.html successfully")
 
-    # 3. Patch desktop.js
+    # 3. Patch html/js/desktop.js
     print("\n3. Patching html/js/desktop.js...")
     desktop_path = os.path.join(target_dir, 'html', 'js', 'desktop.js')
     with open(desktop_path, 'r', encoding='utf-8') as f:
         desktop_content = f.read()
 
-    if 'self.cyberTuner' not in desktop_content:
-        tuner_init_code = """if (window.CyberTuner && $("#mod-tuner-window").length) {
+    # Instantiate CyberTuner
+    init_code = """
+        if (window.CyberTuner && $("#mod-tuner-window").length) {
             self.cyberTuner = new CyberTuner({
                 topButton: $("#mod-tuner-top-btn"),
                 windowModal: $("#mod-tuner-window")
             });
             window.CyberTunerInstance = self.cyberTuner;
         }
-
-        this.transportControls = new TransportControls({"""
-
-        if 'this.transportControls = new TransportControls({' in desktop_content:
-            desktop_content = desktop_content.replace(
-                'this.transportControls = new TransportControls({',
-                tuner_init_code
-            )
-        elif 'self.transport = new TransportControls({' in desktop_content:
-            desktop_content = desktop_content.replace(
-                'self.transport = new TransportControls({',
-                tuner_init_code
-            )
-    elif 'window.CyberTunerInstance = self.cyberTuner;' not in desktop_content:
+"""
+    if 'self.cyberTuner = new CyberTuner' not in desktop_content:
         desktop_content = desktop_content.replace(
-            'self.cyberTuner = new CyberTuner({',
-            'self.cyberTuner = new CyberTuner({'
-        ).replace(
-            'windowModal: $("#mod-tuner-window")\n            });',
-            'windowModal: $("#mod-tuner-window")\n            });\n            window.CyberTunerInstance = self.cyberTuner;'
+            'this.transportControls = new TransportControls({',
+            init_code + '\n        this.transportControls = new TransportControls({'
         )
 
-    # Add :tuner support to renderForm
-    desktop_content = desktop_content.replace(
-        "if (port.symbol == ':bypass' || port.symbol == ':presets') {",
-        "if (port.symbol == ':bypass' || port.symbol == ':presets' || port.symbol == ':tuner') {"
-    )
-    desktop_content = desktop_content.replace(
-        'name: port.symbol == \':bypass\' ? "On/Off" : port.name',
-        'name: port.symbol == \':bypass\' ? "On/Off" : (port.symbol == \':tuner\' ? "Tuner Toggle" : port.name)'
-    )
+    # Ignore :tuner in hardwareManager.setEnabled for transportControls
+    if 'portSymbol == ":tuner"' not in desktop_content:
+        desktop_content = desktop_content.replace(
+            'if (instance == "/pedalboard") {\n                self.transportControls.setControlEnabled(portSymbol, enabled, feedback, forceAddress, momentaryMode)\n                return\n            }',
+            'if (instance == "/pedalboard") {\n                if (portSymbol == ":tuner") {\n                    return;\n                }\n                self.transportControls.setControlEnabled(portSymbol, enabled, feedback, forceAddress, momentaryMode)\n                return\n            }'
+        )
 
     with open(desktop_path, 'w', encoding='utf-8') as f:
         f.write(desktop_content)
     print("  Patched html/js/desktop.js successfully")
 
-    # 4. Patch host.js
+    # 4. Patch html/js/host.js
     print("\n4. Patching html/js/host.js...")
     host_js_path = os.path.join(target_dir, 'html', 'js', 'host.js')
-    if os.path.exists(host_js_path):
-        with open(host_js_path, 'r', encoding='utf-8') as f:
-            host_js_content = f.read()
+    with open(host_js_path, 'r', encoding='utf-8') as f:
+        host_js_content = f.read()
 
-        # 4a. Add tuner-pitch WebSocket message handler
-        if 'cmd == "tuner-pitch"' not in host_js_content:
-            host_js_content = host_js_content.replace(
-                'if (cmd == "cc-device-updated") {',
-                'if (cmd == "tuner-pitch") {\n            if (desktop && desktop.cyberTuner && desktop.cyberTuner.isOpen) {\n                try {\n                    var pData = JSON.parse(data.substr(data.indexOf(" ") + 1));\n                    desktop.cyberTuner.handlePitchMessage(pData);\n                } catch(e) {}\n            }\n            return;\n        }\n\n        if (cmd == "cc-device-updated") {'
-            )
+    # Clean any old bug lines in midi_map
+    host_js_content = host_js_content.replace(
+        'if (window.CyberTunerInstance && window.CyberTunerInstance.isLearningMidi) {\n                window.CyberTunerInstance.handleNativeMidi(channel + 1, control, 127);\n            }',
+        ''
+    )
 
-        # 4b. Add param_set /pedalboard :tuner handler
-        if 'instance == "/pedalboard" && symbol == ":tuner"' not in host_js_content:
-            param_set_block = """        if (cmd == "param_set") {
-            data         = data.split(" ",3)
-            var instance = data[0]
-            var symbol   = data[1]
-            var value    = parseFloat(data[2])
-
+    # Param set listener for /pedalboard :tuner
+    param_set_tuner = """
             if (instance == "/pedalboard" && symbol == ":tuner") {
                 var tuner = window.CyberTunerInstance || (desktop && desktop.cyberTuner);
                 if (tuner) {
@@ -240,72 +218,52 @@ def main():
                 }
                 return;
             }
+"""
+    if 'instance == "/pedalboard" && symbol == ":tuner"' not in host_js_content:
+        host_js_content = host_js_content.replace(
+            'desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);',
+            param_set_tuner + '\n            desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);'
+        )
 
-            desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);
-            return
-        }"""
-            old_param_set = """        if (cmd == "param_set") {
-            data         = data.split(" ",3)
-            var instance = data[0]
-            var symbol   = data[1]
-            var value    = parseFloat(data[2])
-
-            desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);
-            return
-        }"""
-            if old_param_set in host_js_content:
-                host_js_content = host_js_content.replace(old_param_set, param_set_block)
-            else:
-                host_js_content = host_js_content.replace(
-                    'desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);',
-                    '''if (instance == "/pedalboard" && symbol == ":tuner") {
-                var tuner = window.CyberTunerInstance || (desktop && desktop.cyberTuner);
-                if (tuner) {
-                    if (value > 0.5) {
-                        if (!tuner.isOpen) tuner.open();
-                    } else {
-                        if (tuner.isOpen) tuner.close();
-                    }
-                }
-                return;
-            }
-            desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);'''
-                )
-
-        # 4c. Add midi_map tuner label update
-        if 'instance === "/pedalboard" && symbol === ":tuner"' not in host_js_content:
-            host_js_content = host_js_content.replace(
-                'desktop.hardwareManager.addMidiMapping(instance, symbol, channel, control, minimum, maximum)',
-                '''if (instance === "/pedalboard" && symbol === ":tuner") {
+    # Midi map listener for /pedalboard :tuner
+    midi_map_tuner = """
+            if (instance === "/pedalboard" && symbol === ":tuner") {
                 var tuner = window.CyberTunerInstance || (desktop && desktop.cyberTuner);
                 if (tuner && typeof tuner.updateMidiMappingLabel === 'function') {
                     tuner.updateMidiMappingLabel(channel, control);
                 }
             }
-            desktop.hardwareManager.addMidiMapping(instance, symbol, channel, control, minimum, maximum)'''
-            )
+"""
+    if 'instance === "/pedalboard" && symbol === ":tuner"' not in host_js_content:
+        host_js_content = host_js_content.replace(
+            'desktop.hardwareManager.addMidiMapping(instance, symbol, channel, control, minimum, maximum)',
+            midi_map_tuner + '            desktop.hardwareManager.addMidiMapping(instance, symbol, channel, control, minimum, maximum)'
+        )
 
-        with open(host_js_path, 'w', encoding='utf-8') as f:
-            f.write(host_js_content)
-        print("  Patched html/js/host.js: tuner-pitch + param_set/midi_map :tuner support")
+    with open(host_js_path, 'w', encoding='utf-8') as f:
+        f.write(host_js_content)
+    print("  Patched html/js/host.js successfully")
 
     # 5. Patch mod/settings.py
     print("\n5. Patching mod/settings.py...")
     settings_path = os.path.join(target_dir, 'mod', 'settings.py')
-    with open(settings_path, 'r', encoding='utf-8') as f:
-        settings_content = f.read()
+    if os.path.exists(settings_path):
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings_content = f.read()
 
-    settings_content = settings_content.replace(
-        'TUNER = os.environ.get(\'MOD_TUNER_PLUGIN\', "gxtuner")',
-        'TUNER = os.environ.get(\'MOD_TUNER_PLUGIN\', "tuna")'
-    )
-    settings_content = settings_content.replace(
-        'if TUNER == "tuna":\n    TUNER_URI = "urn:mod:tuna"',
-        'if TUNER == "tuna":\n    TUNER_URI = "http://gareus.org/oss/lv2/tuna#mod"'
-    )
-    with open(settings_path, 'w', encoding='utf-8') as f:
-        f.write(settings_content)
-    print("  Patched mod/settings.py: configured tuna.lv2 as native tuner")
+        settings_content = settings_content.replace(
+            'TUNER = os.environ.get(\'MOD_TUNER_PLUGIN\', "gxtuner")',
+            'TUNER = os.environ.get(\'MOD_TUNER_PLUGIN\', "tuna")'
+        )
+        settings_content = settings_content.replace(
+            'if TUNER == "tuna":\n    TUNER_URI = "urn:mod:tuna"',
+            'if TUNER == "tuna":\n    TUNER_URI = "http://gareus.org/oss/lv2/tuna#mod"'
+        )
+        with open(settings_path, 'w', encoding='utf-8') as f:
+            f.write(settings_content)
+        print("  Patched mod/settings.py: configured tuna.lv2 as native tuner")
+    else:
+        print("  mod/settings.py not present, skipping")
 
     # 6. Patch mod/session.py
     print("\n6. Patching mod/session.py...")
@@ -422,11 +380,69 @@ def main():
             'if portsymbol == ":rolling":\n                return 1.0 if self.transport_rolling else 0.0\n            if portsymbol == ":tuner":\n                from mod.session import SESSION\n                return 1.0 if getattr(SESSION, "tuner_active", False) else 0.0'
         )
 
-    # Add :tuner to process_read_message_pedal_changed
-    if 'portsymbol == ":tuner"' not in host_content:
+    # Add :tuner to process_read_message_body under param_set
+    param_set_tuner_hook = """        if cmd == "param_set":
+            msg_data    = data.split(" ",3)
+            instance_id = int(msg_data[0])
+            portsymbol  = msg_data[1]
+            value       = float(msg_data[2])
+
+            if instance_id == TUNER_INSTANCE_ID and (portsymbol == "mode" or portsymbol == ":tuner"):
+                tuner_on = bool(value > 0.5)
+                from mod.session import SESSION
+                if tuner_on:
+                    SESSION.tuner_enable(self.current_tuner_mute)
+                else:
+                    SESSION.tuner_disable()
+                self.msg_callback("param_set /pedalboard :tuner %f" % (1.0 if tuner_on else 0.0))
+                return
+"""
+    if 'if instance_id == TUNER_INSTANCE_ID and (portsymbol == "mode" or portsymbol == ":tuner"):' not in host_content:
         host_content = host_content.replace(
-            'elif portsymbol == ":rolling":\n            self.transport_rolling = bool(int(value))\n            designation_index      = self.DESIGNATIONS_INDEX_SPEED',
-            'elif portsymbol == ":rolling":\n            self.transport_rolling = bool(int(value))\n            designation_index      = self.DESIGNATIONS_INDEX_SPEED\n\n        elif portsymbol == ":tuner":\n            tuner_on = bool(float(value) > 0.5)\n            from mod.session import SESSION\n            if tuner_on:\n                SESSION.tuner_enable(self.current_tuner_mute)\n            else:\n                SESSION.tuner_disable()\n            return'
+            '        if cmd == "param_set":\n            msg_data    = data.split(" ",3)\n            instance_id = int(msg_data[0])\n            portsymbol  = msg_data[1]\n            value       = float(msg_data[2])',
+            param_set_tuner_hook.rstrip()
+        )
+
+    # Add :tuner to process_read_message_body under midi_mapped
+    midi_mapped_tuner_hook = """        elif cmd == "midi_mapped":
+            msg_data    = data.split(" ",7)
+            instance_id = int(msg_data[0])
+            portsymbol  = msg_data[1]
+            channel     = int(msg_data[2])
+            controller  = int(msg_data[3])
+            value       = float(msg_data[4])
+            minimum     = float(msg_data[5])
+            maximum     = float(msg_data[6])
+
+            if instance_id == TUNER_INSTANCE_ID and (portsymbol == "mode" or portsymbol == ":tuner"):
+                instance_id = PEDALBOARD_INSTANCE_ID
+                portsymbol = ":tuner"
+"""
+    if 'if instance_id == TUNER_INSTANCE_ID and (portsymbol == "mode" or portsymbol == ":tuner"):\n                instance_id = PEDALBOARD_INSTANCE_ID' not in host_content:
+        host_content = host_content.replace(
+            '        elif cmd == "midi_mapped":\n            msg_data    = data.split(" ",7)\n            instance_id = int(msg_data[0])\n            portsymbol  = msg_data[1]\n            channel     = int(msg_data[2])\n            controller  = int(msg_data[3])\n            value       = float(msg_data[4])\n            minimum     = float(msg_data[5])\n            maximum     = float(msg_data[6])',
+            midi_mapped_tuner_hook.rstrip()
+        )
+
+    # Map midi_learn for :tuner
+    if 'instance_id == PEDALBOARD_INSTANCE_ID and portsymbol == ":tuner":\n                self.send_notmodified("midi_learn %d mode' not in host_content:
+        host_content = host_content.replace(
+            '        if actuator_uri == kMidiLearnURI:\n            self.send_notmodified("midi_learn %d %s %f %f" % (instance_id,\n                                                              portsymbol,\n                                                              minimum,\n                                                              maximum), callback, datatype=\'boolean\')\n            return',
+            '        if actuator_uri == kMidiLearnURI:\n            if instance_id == PEDALBOARD_INSTANCE_ID and portsymbol == ":tuner":\n                self.send_notmodified("midi_learn %d mode %f %f" % (TUNER_INSTANCE_ID, minimum, maximum), callback, datatype=\'boolean\')\n            else:\n                self.send_notmodified("midi_learn %d %s %f %f" % (instance_id, portsymbol, minimum, maximum), callback, datatype=\'boolean\')\n            return'
+        )
+
+    # Map midi_unmap for :tuner
+    if 'instance_id == PEDALBOARD_INSTANCE_ID and portsymbol == ":tuner":\n                self.send_modified("midi_unmap %d mode' not in host_content:
+        host_content = host_content.replace(
+            '        if actuator_uri == kMidiUnlearnURI:\n            self.send_modified("midi_unmap %d %s" % (instance_id, portsymbol), callback, datatype=\'boolean\')\n            return',
+            '        if actuator_uri == kMidiUnlearnURI:\n            if instance_id == PEDALBOARD_INSTANCE_ID and portsymbol == ":tuner":\n                self.send_modified("midi_unmap %d mode" % TUNER_INSTANCE_ID, callback, datatype=\'boolean\')\n            else:\n                self.send_modified("midi_unmap %d %s" % (instance_id, portsymbol), callback, datatype=\'boolean\')\n            return'
+        )
+
+    # Map explicit midi_map for :tuner
+    if 'instance_id == PEDALBOARD_INSTANCE_ID and portsymbol == ":tuner":\n                            self.send_modified("midi_map %d mode' not in host_content:
+        host_content = host_content.replace(
+            '                        self.send_modified("midi_map %d %s %i %i %f %f" % (instance_id,\n                                                                           portsymbol,\n                                                                           channel,\n                                                                           controller,\n                                                                           minimum,\n                                                                           maximum), callback, datatype=\'boolean\')',
+            '                        if instance_id == PEDALBOARD_INSTANCE_ID and portsymbol == ":tuner":\n                            self.send_modified("midi_map %d mode %i %i %f %f" % (TUNER_INSTANCE_ID, channel, controller, minimum, maximum), callback, datatype=\'boolean\')\n                        else:\n                            self.send_modified("midi_map %d %s %i %i %f %f" % (instance_id, portsymbol, channel, controller, minimum, maximum), callback, datatype=\'boolean\')'
         )
 
     # Add :tuner to hmi_or_cc_parameter_set

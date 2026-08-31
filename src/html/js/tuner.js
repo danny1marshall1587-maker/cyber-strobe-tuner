@@ -188,8 +188,9 @@
             sweetOpts += '<option value="' + k + '"' + sel + '>' + SWEETENED_TUNINGS[k].name + '</option>';
         }
 
-        var midiLabel = this.midiMap ? this.midiMap.label : 'MIDI LEARN';
+        var midiLabel = this.midiMap ? this.midiMap.label : 'MIDI ASSIGN';
         var midiClass = this.midiMap ? 'mapped' : '';
+
 
         var html = [
             '<div class="cyber-tuner-header">',
@@ -273,7 +274,6 @@
             '    </div>',
             '</div>'
         ].join('\n');
-
         this.options.windowModal.html(html);
         this.canvas = document.getElementById('cyber-tuner-canvas');
         if (this.canvas) {
@@ -281,31 +281,65 @@
         }
     };
 
-    // ========================================================
-    // WEB MIDI API INTEGRATION & MIDI LEARN
-    // ========================================================
-    CyberTuner.prototype.initMidi = function () {
-        var self = this;
-        if (!navigator.requestMIDIAccess) return;
 
-        navigator.requestMIDIAccess({ sysex: false }).then(function (midiAccess) {
-            var inputs = midiAccess.inputs.values();
-            for (var input = inputs.next(); input && !input.done; input = inputs.next()) {
-                input.value.onmidimessage = function (msg) {
-                    self.handleMidiMessage(msg);
-                };
-            }
-            midiAccess.onstatechange = function (e) {
-                if (e.port.type === 'input' && e.port.state === 'connected') {
-                    e.port.onmidimessage = function (msg) {
-                        self.handleMidiMessage(msg);
-                    };
-                }
-            };
-        }).catch(function (err) {
-            console.warn('Web MIDI Access notice:', err);
-        });
+    // ========================================================
+    // NATIVE MOD DESKTOP MIDI INTEGRATION
+    // Uses the same hardware addressing system as all other controls (/pedalboard/:tuner)
+    // ========================================================
+
+    CyberTuner.prototype.initMidi = function () {
+        window.CyberTunerInstance = this;
     };
+
+    // Called by host.js when midi_map arrives for /pedalboard :tuner
+    CyberTuner.prototype.handleNativeMidi = function (channel, control, value) {
+        this.updateMidiMappingLabel(channel - 1, control);
+    };
+
+    CyberTuner.prototype.updateMidiMappingLabel = function (channel, control) {
+        this.midiMap = {
+            type: 'cc',
+            number: control,
+            channel: channel + 1,
+            label: 'MIDI: CC ' + control + ' (Ch ' + (channel + 1) + ')'
+        };
+        this.savePreferences();
+        $('#cyber-tuner-midi-learn')
+            .removeClass('learning')
+            .addClass('mapped')
+            .text(this.midiMap.label);
+    };
+
+    // Opens the standard MOD Desktop hardware addressing dialog for the tuner toggle
+    // Identical to assigning any other pedalboard or plugin control
+    CyberTuner.prototype.openMidiAssignDialog = function () {
+        .mod-pedal-settings-address.remove();
+        if (!window.desktop || !window.desktop.hardwareManager) {
+            alert('MOD Desktop hardware manager not available.\nMake sure a pedalboard is loaded.');
+            return;
+        }
+        var tunerPort = {
+            name: 'Tuner',
+            shortName: 'Tuner',
+            symbol: ':tuner',
+            ranges: { minimum: 0.0, maximum: 1.0, default: 0.0 },
+            comment: "Toggle Cyber Tuner",
+            designation: "",
+            properties: ["toggled"],
+            enabled: true,
+            value: (this.isOpen ? 1.0 : 0.0),
+            format: null,
+            units: {},
+            scalePoints: [],
+            widget: this.options.topButton || $("#mod-tuner-top-btn")
+        };
+        window.desktop.hardwareManager.open(
+            "/pedalboard",
+            tunerPort,
+            "Pedalboard"
+        );
+    };
+
 
     CyberTuner.prototype.handleMidiMessage = function (msg) {
         if (!msg || !msg.data || msg.data.length < 2) return;
@@ -437,6 +471,14 @@
             self.toggle();
         });
 
+        // Top button right click -> open MIDI Hardware Addressing Dialog (same as all other controls)
+        $(document).on('contextmenu', '#mod-tuner-top-btn', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            self.openMidiAssignDialog();
+        });
+
+
         // Close button click
         this.options.windowModal.on('click', '.js-cyber-close', function (e) {
             e.preventDefault();
@@ -457,20 +499,11 @@
             }
         });
 
-        // MIDI Learn Button click
+        // MIDI Assign Button click — opens the same Hardware Addressing dialog as all other controls
+        // User gets standard MOD Desktop dialog: MIDI Learn / CC / Device / None
         this.options.windowModal.on('click', '#cyber-tuner-midi-learn', function (e) {
             e.preventDefault();
-            self.isLearningMidi = !self.isLearningMidi;
-            if (self.isLearningMidi) {
-                $(this).addClass('learning').removeClass('mapped').text('PRESS PEDAL...');
-            } else {
-                $(this).removeClass('learning');
-                if (self.midiMap) {
-                    $(this).addClass('mapped').text(self.midiMap.label);
-                } else {
-                    $(this).removeClass('mapped').text('MIDI LEARN');
-                }
-            }
+            self.openMidiAssignDialog();
         });
 
         // MIDI Mode Button click (cycles: momentary -> hold -> latching)
@@ -487,14 +520,15 @@
             self.savePreferences();
         });
 
-        // MIDI Learn Button right-click -> Clear mapping
+        // MIDI Assign Button right-click -> Clear mapping
         this.options.windowModal.on('contextmenu', '#cyber-tuner-midi-learn', function (e) {
             e.preventDefault();
             self.midiMap = null;
             self.isLearningMidi = false;
             self.savePreferences();
-            $(this).removeClass('learning mapped').text('MIDI LEARN');
+            $(this).removeClass('learning mapped').text('MIDI ASSIGN');
         });
+
 
         // Audio Input device select
         this.options.windowModal.on('change', '#cyber-device-select', function () {
