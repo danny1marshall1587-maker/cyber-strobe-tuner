@@ -516,7 +516,7 @@
         });
 
         // Top button right click -> open MIDI Hardware Addressing Dialog (same as all other controls)
-        $(document).on('contextmenu', '#mod-tuner-top-btn', function (e) {
+        $(document).off('contextmenu', '#mod-tuner-top-btn').on('contextmenu', '#mod-tuner-top-btn', function (e) {
             e.preventDefault();
             e.stopPropagation();
             self.openMidiAssignDialog();
@@ -543,9 +543,8 @@
             }
         });
 
-        // MIDI Assign Button click — opens the same Hardware Addressing dialog as all other controls
-        // User gets standard MOD Desktop dialog: MIDI Learn / CC / Device / None
-        this.options.windowModal.on('click', '#cyber-tuner-midi-learn', function (e) {
+        // Top-bar MIDI Assign Button inside modal
+        this.options.windowModal.off('click', '#cyber-tuner-midi-learn').on('click', '#cyber-tuner-midi-learn', function (e) {
             e.preventDefault();
             self.openMidiAssignDialog();
         });

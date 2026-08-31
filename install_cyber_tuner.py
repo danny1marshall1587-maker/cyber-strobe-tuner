@@ -618,6 +618,39 @@ def main():
         f.write(host_py_content)
     print("  Patched mod/host.py successfully")
 
+
+    # 10. Patch mod/host.py to restore Tuner MIDI map on pedalboard load
+    print("\n10. Patching mod/host.py to restore Tuner MIDI on load...")
+    
+    load_patch = '''
+        if bundlepath:
+            # PATCH: Restore Tuner MIDI mapping
+            try:
+                import json, os, re
+                addr_path = os.path.join(bundlepath, "addressings.json")
+                if os.path.exists(addr_path):
+                    with open(addr_path, 'r') as f:
+                        addr_data = json.load(f)
+                    for addr in addr_data:
+                        if addr.get('instance') == '/pedalboard' and addr.get('port') == ':tuner' and addr.get('uri', '').startswith('http://moddevices.com/ns/mod#midi-custom_'):
+                            m = re.match(r'.*_Ch\.(\d+)_CC#(\d+)', addr['uri'])
+                            if m:
+                                ch = int(m.group(1)) - 1
+                                cc = int(m.group(2))
+                                def map_tuner_now(_):
+                                    self.send_notmodified("midi_map %d mode %i %i 0.0 1.0" % (TUNER_INSTANCE_ID, ch, cc))
+                                self.send_notmodified("add %s %d" % (TUNER_URI, TUNER_INSTANCE_ID), map_tuner_now)
+            except Exception as e:
+                pass
+            
+            self.load_pb_snapshots(bundlepath)'''
+
+    if 'self.load_pb_snapshots(bundlepath)' in host_py_content and '# PATCH: Restore Tuner' not in host_py_content:
+        host_py_content = host_py_content.replace('        if bundlepath:\n            self.load_pb_snapshots(bundlepath)', load_patch)
+        with open(host_py_path, 'w', encoding='utf-8') as f:
+            f.write(host_py_content)
+        print("  Patched mod/host.py (load) successfully")
+
     print("\n================================================================")
     print("  CYBER STROBE & PEAK TUNER INSTALLATION COMPLETE! 100% SUCCESS")
     print("================================================================")
