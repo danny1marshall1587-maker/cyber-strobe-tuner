@@ -59,6 +59,7 @@ def main():
         os.path.join(target_dir, 'html', 'index.html'),
         os.path.join(target_dir, 'html', 'js', 'desktop.js'),
         os.path.join(target_dir, 'html', 'js', 'host.js'),
+        os.path.join(target_dir, 'mod', 'settings.py'),
         os.path.join(target_dir, 'mod', 'webserver.py'),
         os.path.join(target_dir, 'mod', 'session.py'),
         os.path.join(target_dir, 'mod', 'host.py'),
@@ -168,6 +169,7 @@ def main():
                 topButton: $("#mod-tuner-top-btn"),
                 windowModal: $("#mod-tuner-window")
             });
+            window.CyberTunerInstance = self.cyberTuner;
         }
 
         this.transportControls = new TransportControls({"""
@@ -182,10 +184,28 @@ def main():
                 'self.transport = new TransportControls({',
                 tuner_init_code
             )
+    elif 'window.CyberTunerInstance = self.cyberTuner;' not in desktop_content:
+        desktop_content = desktop_content.replace(
+            'self.cyberTuner = new CyberTuner({',
+            'self.cyberTuner = new CyberTuner({'
+        ).replace(
+            'windowModal: $("#mod-tuner-window")\n            });',
+            'windowModal: $("#mod-tuner-window")\n            });\n            window.CyberTunerInstance = self.cyberTuner;'
+        )
 
-        with open(desktop_path, 'w', encoding='utf-8') as f:
-            f.write(desktop_content)
-        print("  Patched html/js/desktop.js successfully")
+    # Add :tuner support to renderForm
+    desktop_content = desktop_content.replace(
+        "if (port.symbol == ':bypass' || port.symbol == ':presets') {",
+        "if (port.symbol == ':bypass' || port.symbol == ':presets' || port.symbol == ':tuner') {"
+    )
+    desktop_content = desktop_content.replace(
+        'name: port.symbol == \':bypass\' ? "On/Off" : port.name',
+        'name: port.symbol == \':bypass\' ? "On/Off" : (port.symbol == \':tuner\' ? "Tuner Toggle" : port.name)'
+    )
+
+    with open(desktop_path, 'w', encoding='utf-8') as f:
+        f.write(desktop_content)
+    print("  Patched html/js/desktop.js successfully")
 
     # 4. Patch host.js
     print("\n4. Patching html/js/host.js...")
@@ -193,17 +213,102 @@ def main():
     if os.path.exists(host_js_path):
         with open(host_js_path, 'r', encoding='utf-8') as f:
             host_js_content = f.read()
+
+        # 4a. Add tuner-pitch WebSocket message handler
         if 'cmd == "tuner-pitch"' not in host_js_content:
             host_js_content = host_js_content.replace(
                 'if (cmd == "cc-device-updated") {',
                 'if (cmd == "tuner-pitch") {\n            if (desktop && desktop.cyberTuner && desktop.cyberTuner.isOpen) {\n                try {\n                    var pData = JSON.parse(data.substr(data.indexOf(" ") + 1));\n                    desktop.cyberTuner.handlePitchMessage(pData);\n                } catch(e) {}\n            }\n            return;\n        }\n\n        if (cmd == "cc-device-updated") {'
             )
-            with open(host_js_path, 'w', encoding='utf-8') as f:
-                f.write(host_js_content)
-            print("  Patched html/js/host.js successfully")
 
-    # 5. Patch mod/session.py
-    print("\n5. Patching mod/session.py...")
+        # 4b. Add param_set /pedalboard :tuner handler
+        if 'instance == "/pedalboard" && symbol == ":tuner"' not in host_js_content:
+            param_set_block = """        if (cmd == "param_set") {
+            data         = data.split(" ",3)
+            var instance = data[0]
+            var symbol   = data[1]
+            var value    = parseFloat(data[2])
+
+            if (instance == "/pedalboard" && symbol == ":tuner") {
+                var tuner = window.CyberTunerInstance || (desktop && desktop.cyberTuner);
+                if (tuner) {
+                    if (value > 0.5) {
+                        if (!tuner.isOpen) tuner.open();
+                    } else {
+                        if (tuner.isOpen) tuner.close();
+                    }
+                }
+                return;
+            }
+
+            desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);
+            return
+        }"""
+            old_param_set = """        if (cmd == "param_set") {
+            data         = data.split(" ",3)
+            var instance = data[0]
+            var symbol   = data[1]
+            var value    = parseFloat(data[2])
+
+            desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);
+            return
+        }"""
+            if old_param_set in host_js_content:
+                host_js_content = host_js_content.replace(old_param_set, param_set_block)
+            else:
+                host_js_content = host_js_content.replace(
+                    'desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);',
+                    '''if (instance == "/pedalboard" && symbol == ":tuner") {
+                var tuner = window.CyberTunerInstance || (desktop && desktop.cyberTuner);
+                if (tuner) {
+                    if (value > 0.5) {
+                        if (!tuner.isOpen) tuner.open();
+                    } else {
+                        if (tuner.isOpen) tuner.close();
+                    }
+                }
+                return;
+            }
+            desktop.pedalboard.pedalboard("setPortWidgetsValue", instance, symbol, value);'''
+                )
+
+        # 4c. Add midi_map tuner label update
+        if 'instance === "/pedalboard" && symbol === ":tuner"' not in host_js_content:
+            host_js_content = host_js_content.replace(
+                'desktop.hardwareManager.addMidiMapping(instance, symbol, channel, control, minimum, maximum)',
+                '''if (instance === "/pedalboard" && symbol === ":tuner") {
+                var tuner = window.CyberTunerInstance || (desktop && desktop.cyberTuner);
+                if (tuner && typeof tuner.updateMidiMappingLabel === 'function') {
+                    tuner.updateMidiMappingLabel(channel, control);
+                }
+            }
+            desktop.hardwareManager.addMidiMapping(instance, symbol, channel, control, minimum, maximum)'''
+            )
+
+        with open(host_js_path, 'w', encoding='utf-8') as f:
+            f.write(host_js_content)
+        print("  Patched html/js/host.js: tuner-pitch + param_set/midi_map :tuner support")
+
+    # 5. Patch mod/settings.py
+    print("\n5. Patching mod/settings.py...")
+    settings_path = os.path.join(target_dir, 'mod', 'settings.py')
+    with open(settings_path, 'r', encoding='utf-8') as f:
+        settings_content = f.read()
+
+    settings_content = settings_content.replace(
+        'TUNER = os.environ.get(\'MOD_TUNER_PLUGIN\', "gxtuner")',
+        'TUNER = os.environ.get(\'MOD_TUNER_PLUGIN\', "tuna")'
+    )
+    settings_content = settings_content.replace(
+        'if TUNER == "tuna":\n    TUNER_URI = "urn:mod:tuna"',
+        'if TUNER == "tuna":\n    TUNER_URI = "http://gareus.org/oss/lv2/tuna#mod"'
+    )
+    with open(settings_path, 'w', encoding='utf-8') as f:
+        f.write(settings_content)
+    print("  Patched mod/settings.py: configured tuna.lv2 as native tuner")
+
+    # 6. Patch mod/session.py
+    print("\n6. Patching mod/session.py...")
     session_path = os.path.join(target_dir, 'mod', 'session.py')
     with open(session_path, 'r', encoding='utf-8') as f:
         session_lines = f.readlines()
@@ -297,23 +402,58 @@ def main():
         f.write(session_content)
     print("  Patched mod/session.py successfully")
 
-    # 6. Patch mod/host.py
-    print("\n6. Patching mod/host.py...")
+    # 7. Patch mod/host.py
+    print("\n7. Patching mod/host.py...")
     host_path = os.path.join(target_dir, 'mod', 'host.py')
     with open(host_path, 'r', encoding='utf-8') as f:
         host_content = f.read()
 
-    broken_try = """        try:
-            yield gen.Task(self.hmi.tuner, freq, note, cents)
-        try:
-            from mod.session import SESSION
-            SESSION.tuner_pitch_update(freq, note, cents)
-        except Exception as e:
-            pass
-        except Exception as e:
-            logging.exception(e)
-            return"""
+    # Add :tuner to PEDALBOARD_INSTANCE_ID midiCCs
+    if '":tuner"' not in host_content:
+        host_content = host_content.replace(
+            '":rolling": (-1,-1,0.0,1.0),',
+            '":rolling": (-1,-1,0.0,1.0),\n                    ":tuner"  : (-1,-1,0.0,1.0),'
+        )
 
+    # Add :tuner to addr_task_get_port_value
+    if 'portsymbol == ":tuner"' not in host_content:
+        host_content = host_content.replace(
+            'if portsymbol == ":rolling":\n                return 1.0 if self.transport_rolling else 0.0',
+            'if portsymbol == ":rolling":\n                return 1.0 if self.transport_rolling else 0.0\n            if portsymbol == ":tuner":\n                from mod.session import SESSION\n                return 1.0 if getattr(SESSION, "tuner_active", False) else 0.0'
+        )
+
+    # Add :tuner to process_read_message_pedal_changed
+    if 'portsymbol == ":tuner"' not in host_content:
+        host_content = host_content.replace(
+            'elif portsymbol == ":rolling":\n            self.transport_rolling = bool(int(value))\n            designation_index      = self.DESIGNATIONS_INDEX_SPEED',
+            'elif portsymbol == ":rolling":\n            self.transport_rolling = bool(int(value))\n            designation_index      = self.DESIGNATIONS_INDEX_SPEED\n\n        elif portsymbol == ":tuner":\n            tuner_on = bool(float(value) > 0.5)\n            from mod.session import SESSION\n            if tuner_on:\n                SESSION.tuner_enable(self.current_tuner_mute)\n            else:\n                SESSION.tuner_disable()\n            return'
+        )
+
+    # Add :tuner to hmi_or_cc_parameter_set
+    if 'elif portsymbol == ":tuner":' not in host_content:
+        host_content = host_content.replace(
+            'if portsymbol in (":bpb", ":bpm", ":rolling"):',
+            'if portsymbol in (":bpb", ":bpm", ":rolling", ":tuner"):'
+        )
+        host_content = host_content.replace(
+            'elif portsymbol == ":rolling":\n                        rolling = bool(value > 0.5)\n                        self.set_transport_rolling(rolling, True, True, True, False, callback)',
+            'elif portsymbol == ":rolling":\n                        rolling = bool(value > 0.5)\n                        self.set_transport_rolling(rolling, True, True, True, False, callback)\n                    elif portsymbol == ":tuner":\n                        tuner_on = bool(value > 0.5)\n                        from mod.session import SESSION\n                        if tuner_on:\n                            SESSION.tuner_enable(self.current_tuner_mute)\n                        else:\n                            SESSION.tuner_disable()\n                        self.msg_callback("param_set /pedalboard :tuner %f" % (1.0 if tuner_on else 0.0))\n                        if callback is not None:\n                            callback(True)'
+        )
+
+    # Fix hmi_tuner_ref_freq for tuna
+    host_content = host_content.replace(
+        'self.send_notmodified("param_set %d REFFREQ %d" % (TUNER_INSTANCE_ID, freq), callback)',
+        'ref_port = "tuning" if str(TUNER_URI).startswith("http://gareus.org") or str(TUNER_URI) == "urn:mod:tuna" else "REFFREQ"\n        self.send_notmodified("param_set %d %s %f" % (TUNER_INSTANCE_ID, ref_port, float(freq)), callback)'
+    )
+
+    # Add :tuner to portsyms in save_pedalboard
+    if '":tuner"' not in host_content:
+        host_content = host_content.replace(
+            'portsyms = [":bpb",":bpm",":rolling",',
+            'portsyms = [":bpb",":bpm",":rolling",":tuner",'
+        )
+
+    # Pitch update in set_tuner_value
     clean_try = """        try:
             yield gen.Task(self.hmi.tuner, freq, note, cents)
             from mod.session import SESSION
@@ -321,26 +461,18 @@ def main():
         except Exception as e:
             logging.exception(e)
             return"""
-
-    if broken_try in host_content:
-        host_content = host_content.replace(broken_try, clean_try)
-    elif 'SESSION.tuner_pitch_update' not in host_content:
-        orig_block = """        try:
+    orig_block = """        try:
             yield gen.Task(self.hmi.tuner, freq, note, cents)
         except Exception as e:"""
-        new_block = """        try:
-            yield gen.Task(self.hmi.tuner, freq, note, cents)
-            from mod.session import SESSION
-            SESSION.tuner_pitch_update(freq, note, cents)
-        except Exception as e:"""
-        host_content = host_content.replace(orig_block, new_block)
+    if orig_block in host_content and 'SESSION.tuner_pitch_update' not in host_content:
+        host_content = host_content.replace(orig_block, clean_try)
 
     with open(host_path, 'w', encoding='utf-8') as f:
         f.write(host_content)
-    print("  Patched mod/host.py successfully")
+    print("  Patched mod/host.py successfully with native :tuner pedalboard port")
 
-    # 7. Patch mod/webserver.py
-    print("\n7. Patching mod/webserver.py...")
+    # 8. Patch mod/webserver.py
+    print("\n8. Patching mod/webserver.py...")
     webserver_path = os.path.join(target_dir, 'mod', 'webserver.py')
     with open(webserver_path, 'r', encoding='utf-8') as f:
         webserver_content = f.read()
