@@ -653,26 +653,15 @@ def main():
 
 
         # 11. Patch webserver.py for Auto-Restore Tuner MIDI
-    print("
-11. Patching mod/webserver.py for MIDI persistence...")
+    print("\n11. Patching mod/webserver.py for MIDI persistence...")
     webserver_py_path = os.path.join(target_dir, "mod", "webserver.py")
     if os.path.exists(webserver_py_path):
         with open(webserver_py_path, 'r', encoding='utf-8') as f:
             ws_content = f.read()
             
-        old_ws_code = '''        elif cmd == "tuner_midi_map":
-            ch, cc = data[1].split(" ")
-            SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))
-            return'''
+        old_ws_code = '''        elif cmd == "tuner_midi_map":\n            ch, cc = data[1].split(" ")\n            SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))\n            return'''
         
-        ws_patch = '''        elif cmd == "tuner_midi_map":
-            ch, cc = data[1].split(" ")
-            def map_tuner_now(_):
-                SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))
-            SESSION.host.send_notmodified("add http://moddevices.com/plugins/mod-devel/tuna 9994", map_tuner_now)
-            return
-
-'''
+        ws_patch = '''        elif cmd == "tuner_midi_map":\n            ch, cc = data[1].split(" ")\n            def map_tuner_now(_):\n                SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))\n            SESSION.host.send_notmodified("add http://moddevices.com/plugins/mod-devel/tuna 9994", map_tuner_now)\n            return\n\n'''
         
         if old_ws_code in ws_content:
             ws_content = ws_content.replace(old_ws_code, ws_patch.strip())
