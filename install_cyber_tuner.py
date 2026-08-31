@@ -633,7 +633,7 @@ def main():
                         addr_data = json.load(f)
                     for addr in addr_data:
                         if addr.get('instance') == '/pedalboard' and addr.get('port') == ':tuner' and addr.get('uri', '').startswith('http://moddevices.com/ns/mod#midi-custom_'):
-                            m = re.match(r'.*_Ch\.(\d+)_CC#(\d+)', addr['uri'])
+                            m = re.match(r'.*_Ch\\.([^a-zA-Z]+)_CC#(\\d+)', addr['uri'])
                             if m:
                                 ch = int(m.group(1)) - 1
                                 cc = int(m.group(2))
@@ -654,7 +654,7 @@ def main():
 
     # 11. Patch webserver.py for Auto-Restore Tuner MIDI
     print("\n11. Patching mod/webserver.py for MIDI persistence...")
-    webserver_py_path = os.path.join(mod_dir, "webserver.py")
+    webserver_py_path = os.path.join(target_dir, "mod", "webserver.py")
     if os.path.exists(webserver_py_path):
         with open(webserver_py_path, 'r', encoding='utf-8') as f:
             ws_content = f.read()
