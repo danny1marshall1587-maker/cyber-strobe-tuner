@@ -633,19 +633,39 @@
         });
 
 
-        // --- AUTO RESTORE NATIVE MIDI ON LOAD ---
-        if (this.midiMap && this.midiMap.type === 'cc') {
-            var restore_ch = this.midiMap.channel - 1;
-            var restore_cc = this.midiMap.number;
-            var attempts = 0;
-            var restoreInt = setInterval(function() {
+        // --- AUTO RESTORE NATIVE MIDI ON LOAD & PEDALBOARD CHANGE ---
+        var restoreMidi = function() {
+            if (self.midiMap && self.midiMap.type === 'cc') {
+                var restore_ch = self.midiMap.channel - 1;
+                var restore_cc = self.midiMap.number;
                 if (typeof ws !== 'undefined' && ws && ws.readyState === 1) {
                     ws.send('tuner_midi_map ' + restore_ch + ' ' + restore_cc);
-                    clearInterval(restoreInt);
                 }
-                if (attempts++ > 20) clearInterval(restoreInt); // give up after 10s
-            }, 500);
-        }
+            }
+        };
+
+        // 1. Restore on first load (wait for GUI to finish initializing)
+        var attempts = 0;
+        var restoreInt = setInterval(function() {
+            if ($("body").hasClass("initialized") && typeof ws !== 'undefined' && ws && ws.readyState === 1) {
+                restoreMidi();
+                clearInterval(restoreInt);
+            }
+            if (attempts++ > 100) clearInterval(restoreInt); // give up after 50s
+        }, 500);
+
+        // 2. Restore after ANY pedalboard load/switch
+        $(document).ajaxComplete(function(event, xhr, settings) {
+            if (settings.url && (
+                settings.url.indexOf('/pedalboard/load_bundle') !== -1 ||
+                settings.url.indexOf('/snapshot/load') !== -1 ||
+                settings.url.indexOf('/banks/load') !== -1 ||
+                settings.url.indexOf('/pedalboard/info') !== -1
+            )) {
+                // Wait 1.5 seconds for backend to settle after load, then inject Tuner
+                setTimeout(restoreMidi, 1500);
+            }
+        });
         // ----------------------------------------
 
         // Mute toggle
