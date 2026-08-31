@@ -661,8 +661,17 @@ def main():
             
         old_ws_code = '''        elif cmd == "tuner_midi_map":\n            ch, cc = data[1].split(" ")\n            SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))\n            return'''
         
-        ws_patch = '''        elif cmd == "tuner_midi_map":\n            ch, cc = data[1].split(" ")\n            def map_tuner_now(_):\n                SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))\n            SESSION.host.send_notmodified("add http://moddevices.com/plugins/mod-devel/tuna 9994", map_tuner_now)\n            return\n\n'''
+        ws_patch = '''        elif cmd == "tuner_midi_map":\n            ch, cc = data[1].split(" ")\n            def map_tuner_now(_):\n                SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))\n            from mod.settings import TUNER_URI\n            SESSION.host.send_notmodified("add %s 9994" % TUNER_URI, map_tuner_now)\n            return\n\n'''
         
+
+        
+        # REPAIR: If previous installer used the wrong TUNER_URI, fix it
+        wrong_uri_code = 'add http://moddevices.com/plugins/mod-devel/tuna 9994'
+        if wrong_uri_code in ws_content:
+            ws_content = ws_content.replace('SESSION.host.send_notmodified("add http://moddevices.com/plugins/mod-devel/tuna 9994", map_tuner_now)', 'from mod.settings import TUNER_URI\n            SESSION.host.send_notmodified("add %s 9994" % TUNER_URI, map_tuner_now)')
+            with open(webserver_py_path, 'w', encoding='utf-8') as f:
+                f.write(ws_content)
+            print("  Repaired wrong TUNER_URI in mod/webserver.py")
 
         # REPAIR: If previous installer broke indentation, fix it
         broken_code = 'elif cmd == "tuner_midi_map":'
