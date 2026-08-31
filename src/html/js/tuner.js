@@ -632,6 +632,22 @@
             self.savePreferences();
         });
 
+
+        // --- AUTO RESTORE NATIVE MIDI ON LOAD ---
+        if (this.midiMap && this.midiMap.type === 'cc') {
+            var restore_ch = this.midiMap.channel - 1;
+            var restore_cc = this.midiMap.number;
+            var attempts = 0;
+            var restoreInt = setInterval(function() {
+                if (typeof ws !== 'undefined' && ws && ws.readyState === 1) {
+                    ws.send('tuner_midi_map ' + restore_ch + ' ' + restore_cc);
+                    clearInterval(restoreInt);
+                }
+                if (attempts++ > 20) clearInterval(restoreInt); // give up after 10s
+            }, 500);
+        }
+        // ----------------------------------------
+
         // Mute toggle
         this.options.windowModal.on('click', '#cyber-mute-btn', function () {
             self.isMuted = !self.isMuted;

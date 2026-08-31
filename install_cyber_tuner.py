@@ -651,6 +651,23 @@ def main():
             f.write(host_py_content)
         print("  Patched mod/host.py (load) successfully")
 
+
+    # 11. Patch webserver.py for Auto-Restore Tuner MIDI
+    print("\n11. Patching mod/webserver.py for MIDI persistence...")
+    webserver_py_path = os.path.join(mod_dir, "webserver.py")
+    if os.path.exists(webserver_py_path):
+        with open(webserver_py_path, 'r', encoding='utf-8') as f:
+            ws_content = f.read()
+        ws_patch = '''        elif cmd == "tuner_midi_map":
+            ch, cc = data[1].split(" ")
+            SESSION.host.send_notmodified("midi_map 9994 mode %d %d 0.0 1.0" % (int(ch), int(cc)))
+            return\n\n'''
+        if 'cmd == "tuner_midi_map"' not in ws_content:
+            ws_content = ws_content.replace('        elif cmd == "param_set":', ws_patch + '        elif cmd == "param_set":')
+            with open(webserver_py_path, 'w', encoding='utf-8') as f:
+                f.write(ws_content)
+            print("  Patched mod/webserver.py successfully")
+
     print("\n================================================================")
     print("  CYBER STROBE & PEAK TUNER INSTALLATION COMPLETE! 100% SUCCESS")
     print("================================================================")
