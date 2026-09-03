@@ -133,18 +133,34 @@ def main():
                 '<script src="js/tuner.js"></script>\n<script src="js/desktop.js"></script>'
             )
 
-    # Add Top Header Tuner button
-    top_btn_html = '<a id="mod-tuner-top-btn" class="mod-tuner-top-btn" title="Open Cyber Strobe & Peak Tuner (Right-click to assign MIDI)" href="javascript:void(0);">TUNER</a>'
+    # Add Top Header Tuner button in #pedalboard-actions and #main-menu
+    top_btn_html = '<button class="js-tuner menu-trigger" id="mod-tuner-top-btn" title="Open Cyber Strobe & Peak Tuner (Right-click to assign MIDI)">TUNER</button>'
+    menu_icon_html = '<div id="mod-tuner-icon" class="icon" data-message="Open Cyber Strobe Tuner">TUNER</div>'
+
+    # 1. Add into #pedalboard-actions (next to snapshots / presets)
     if 'id="mod-tuner-top-btn"' not in html_content:
-        if '<a id="mod-transport-icon"' in html_content:
+        if '<div id="js-preset-menu"' in html_content:
+            html_content = html_content.replace(
+                '<div id="js-preset-menu"',
+                top_btn_html + '\n                    <div id="js-preset-menu"'
+            )
+        elif '<header id="pedalboard-actions">' in html_content:
+            html_content = html_content.replace(
+                '<header id="pedalboard-actions">',
+                '<header id="pedalboard-actions">\n        ' + top_btn_html
+            )
+
+    # 2. Add into #main-menu (top/bottom bar menu next to transport icon)
+    if 'id="mod-tuner-icon"' not in html_content:
+        if '<div id="mod-transport-icon"' in html_content:
+            html_content = html_content.replace(
+                '<div id="mod-transport-icon"',
+                menu_icon_html + '\n        <div id="mod-transport-icon"'
+            )
+        elif '<a id="mod-transport-icon"' in html_content:
             html_content = html_content.replace(
                 '<a id="mod-transport-icon"',
-                top_btn_html + '\n            <a id="mod-transport-icon"'
-            )
-        elif '<div id="mod-transport-window"' in html_content:
-            html_content = html_content.replace(
-                '<div id="mod-transport-window"',
-                top_btn_html + '\n    <div id="mod-transport-window"'
+                '<a id="mod-tuner-icon" class="icon" data-message="Open Cyber Strobe Tuner">TUNER</a>\n        <a id="mod-transport-icon"'
             )
 
     # Add Tuner Window Modal container
