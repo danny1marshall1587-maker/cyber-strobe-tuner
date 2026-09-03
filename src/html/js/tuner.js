@@ -508,15 +508,15 @@
     CyberTuner.prototype.bindEvents = function () {
         var self = this;
 
-        // Top button click -> toggle modal
-        $(document).on('click', '#mod-tuner-top-btn', function (e) {
+        // Top button and main menu icon click -> toggle modal
+        $(document).on('click', '#mod-tuner-top-btn, #mod-tuner-icon, .js-tuner', function (e) {
             e.preventDefault();
             e.stopPropagation();
             self.toggle();
         });
 
         // Top button right click -> open MIDI Hardware Addressing Dialog (same as all other controls)
-        $(document).off('contextmenu', '#mod-tuner-top-btn').on('contextmenu', '#mod-tuner-top-btn', function (e) {
+        $(document).off('contextmenu', '#mod-tuner-top-btn, #mod-tuner-icon').on('contextmenu', '#mod-tuner-top-btn, #mod-tuner-icon', function (e) {
             e.preventDefault();
             e.stopPropagation();
             self.openMidiAssignDialog();
@@ -709,7 +709,7 @@
         this.isOpen = true;
         this.backdrop.fadeIn(150);
         this.options.windowModal.css('display', 'flex').hide().fadeIn(150);
-        $('#mod-tuner-top-btn').addClass('active');
+        $('#mod-tuner-top-btn, #mod-tuner-icon').addClass('active');
 
         this.sendWsCommand('tuner-enable ' + (this.isMuted ? '1' : '0'));
         this.sendWsCommand('tuner-ref-freq ' + this.refFreq);
@@ -723,7 +723,7 @@
         this.isOpen = false;
         this.backdrop.fadeOut(150);
         this.options.windowModal.fadeOut(150);
-        $('#mod-tuner-top-btn').removeClass('active');
+        $('#mod-tuner-top-btn, #mod-tuner-icon').removeClass('active');
 
         this.sendWsCommand('tuner-disable');
 
