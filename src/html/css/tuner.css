@@ -47,6 +47,28 @@ header button.js-tuner.active, #mod-tuner-top-btn.active {
     box-shadow: inset 0 -2px 0 var(--tuner-theme-color);
 }
 
+/* Main Menu Top/Bottom Bar Icon */
+#main-menu #mod-tuner-icon {
+    display: inline-block !important;
+    background-image: url(../img/icons/25/tuner.png) !important;
+    background-position: 50% 8px !important;
+    background-size: 24px 24px !important;
+    background-repeat: no-repeat !important;
+    color: #ffffff !important;
+    cursor: pointer !important;
+    font-size: 10px !important;
+    font-weight: bold !important;
+    text-transform: uppercase !important;
+    text-align: center !important;
+    line-height: 72px !important;
+}
+
+#main-menu #mod-tuner-icon:hover,
+#main-menu #mod-tuner-icon.active {
+    color: var(--tuner-theme-color) !important;
+    background-color: #000000 !important;
+}
+
 /* Dimmed backdrop overlay */
 #mod-tuner-backdrop {
     display: none;
